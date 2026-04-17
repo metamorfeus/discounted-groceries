@@ -362,6 +362,7 @@ Keep this updated as you add projects:
 |---|---|---|---|---|
 | `default` | General / existing projects | `hermes` | — | Original |
 | `book-rag-anything` | BOOK-GRAPH-RAG infrastructure | `hermes-book-rag-anything` | metamorfeus/BOOK-GRAPH-RAG | Apr 2026 |
+| `discounted-groceries` | BG Food Prices pipeline | `hermes-discounted-groceries` | metamorfeus/discounted-groceries | Apr 2026 |
 | `my-project` | YOUR PROJECT | `hermes-my-project` | YOUR-USERNAME/MY-PROJECT | — |
 
 ---
@@ -491,7 +492,7 @@ setup script. New machines or reinstalls apply all project MCPs in one command.
 
 | Priority | Improvement | Effort | Impact |
 |---|---|---|---|
-| 1 | `new-project.py` automation script | Medium | Eliminates 12 manual steps |
+| 1 | ~~`new-project.py` automation script~~ | ~~Medium~~ | ✅ Done — `HERMES_INTERGRATION/new-project.py` |
 | 2 | Memory seeding script | Low | Eliminates Azure filter workaround |
 | 3 | AGENTS.md template | Low | Consistency across projects |
 | 4 | ~~VPS auto-sync~~ | ~~Low~~ | ✅ Done |
