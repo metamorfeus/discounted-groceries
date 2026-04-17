@@ -1,0 +1,43 @@
+# ── Secrets ────────────────────────────────────────────────────────────────────
+secrets.py
+azure_secrets.json
+
+# ── Python cache ───────────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# ── Generated binary outputs (large, not version-controlled) ───────────────────
+*.pdf
+*.xlsx
+*.xls
+*.png
+*.jpg
+*.jpeg
+*.gif
+
+# ── Machine-specific duplicate files ──────────────────────────────────────────
+*-DESKTOP-CMDM9KH*
+
+# ── Working / scratch directories ─────────────────────────────────────────────
+billa_work/
+fantastico_work/
+
+# ── Raw scraper output (intermediate, regeneratable) ──────────────────────────
+billa_raw*.md
+billa_raw-*.md
+
+# ── Intermediate per-run data files (regenerated each week) ───────────────────
+billa_products_*.json
+kaufland_direct_cw*.json
+category_analysis_report.json
+translation_cache.json
+
+# ── Master dataset (generated output — comment out to version-control it) ──────
+bulgarian_promo_prices_merged*.json
+bulgarian_promo_prices_2026-*.json
+
+# ── Session notes (local only) ─────────────────────────────────────────────────
+chat_history.md
+chat_history-*.md

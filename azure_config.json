@@ -1,0 +1,11 @@
+{
+  "_comment": "Конфигурация за Azure OpenAI — незасегнат при обновяване на скрипта.",
+  "endpoint": "https://openai-ops-meeting.openai.azure.com/",
+  "deployment_name": "gpt-4o",
+  "api_version": "2024-02-01",
+  "max_tokens": 2000,
+  "temperature": 0.0,
+  "timeout_seconds": 60,
+  "max_items_per_call": 40,
+  "delay_between_calls_seconds": 0.5
+}
