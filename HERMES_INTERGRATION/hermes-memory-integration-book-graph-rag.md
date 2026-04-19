@@ -35,6 +35,23 @@ memory plugin for Claude Code is needed.
 
 ---
 
+## Profile Details
+
+| Item | Value |
+|---|---|
+| Profile name | `book-rag-anything` |
+| Command alias | `book-rag-anything` (on VPS) |
+| Profile path | `~/.hermes/profiles/book-rag-anything/` |
+| Hindsight bank_id | `book-rag-anything` |
+| GitHub repo | `github.com/metamorfeus/BOOK-GRAPH-RAG` (private) |
+| VPS repo path | `~/projects/BOOK-GRAPH-RAG/` |
+| MCP bat file | `hermes-book-rag-anything-mcp.bat` (project root) |
+| MCP server name | `hermes-book-rag-anything` |
+| Set up date | 2026-04-16 |
+| Memory seeded | 2026-04-16 (8 facts via `hermes chat`) |
+
+---
+
 ## Why a Separate Profile
 
 You already had other projects running under the default Hermes profile. To prevent
@@ -90,6 +107,13 @@ EOF
 
 A unique `bank_id` ensures Hindsight stores this project's memories separately from
 any other project's memories.
+
+> ⚠️ **Mode caveat:** If this VPS is also running a standalone `hindsight-api` server
+> (port 8888) — as set up for the `discounted-groceries` profile — then `"mode": "local"`
+> may silently fail. `"local"` is a legacy alias for `"local_embedded"` which tries to
+> start a new embedded server rather than connecting to the existing one. In that case,
+> change to `"local_external"` and add `"api_url": "http://localhost:8888"`. Verify
+> with `curl http://localhost:8888/health` first.
 
 ### Step 4 — Created the GitHub repository
 
@@ -205,10 +229,19 @@ claude
 Use hermes-book-rag-anything to recall what you know about this project
 ```
 
+> **Note:** Memory recall fires starting from **the second turn** of each chat session.
+> Turn 1 always has an empty prefetch cache. If you need recall in a one-shot query,
+> use two `-q` flags: `hermes -p book-rag-anything chat -Q -q "hello" -q "your question"`.
+
 **Add new facts to memory during a session:**
 ```
 Use hermes-book-rag-anything to save this fact: [your fact here]
 ```
+
+> ⚠️ **Azure content filter:** If memory saving fails with a filter error, use short
+> neutral factual statements. Avoid words like "critical", "bypass", "inject",
+> "override" even in innocent technical contexts — Azure's jailbreak filter triggers
+> on these patterns.
 
 **Update the repo after adding new docs:**
 ```powershell
@@ -272,6 +305,30 @@ Expected output:
 --- Sync run: Fri Apr 17 02:23:44 CEST 2026 ---
 /home/hermes/projects/BOOK-GRAPH-RAG/: already up to date
 /home/hermes/projects/BOOK/: already up to date
+```
+
+---
+
+## Profile Commands (on VPS)
+
+```bash
+# Start the book-rag-anything profile interactively
+hermes -p book-rag-anything chat
+
+# One-shot query (recall fires from turn 2 — use two -q flags)
+hermes -p book-rag-anything chat -Q -q "hello" -q "your question"
+
+# Check hindsight-api health (if running standalone server)
+curl http://localhost:8888/health
+
+# Check LiteLLM proxy health
+curl http://localhost:4000/health
+
+# List all Hermes profiles
+hermes profile list
+
+# Check systemd service status (if services are configured)
+systemctl --user status litellm-proxy.service hindsight-api.service
 ```
 
 ---

@@ -4,7 +4,7 @@
 
 Листи:
   1. Най-евтини по категория  — топ 5 по нормализирана цена
-  2. All by category           — всички продукти по категория
+  2. Всички по категория           — всички продукти по категория
   3. Обобщение                — най-евтиният от всяка подкатегория
   4. Сравнение (авто)        — Union-Find по ключови думи
   5. Сравнение (ИИ)          — Azure OpenAI GPT-4o
@@ -64,6 +64,27 @@ SUBCAT_FILL   = PatternFill('solid', fgColor='E9EDF4')
 REVIEW_FILL   = PatternFill('solid', fgColor='EBF3FB')
 BORDER        = Border(bottom=Side(style='thin', color='D9D9D9'))
 THICK_BORDER  = Border(bottom=Side(style='medium', color='1F4E79'))
+
+# ── Extraction-method lookup ──────────────────────────────────────────────────
+_METHOD_MAP = {
+    ('Hit Max',    'Gladen.bg'): 'HTML скрейпинг (gladen.bg)',
+    ('Billa',      'Direct'):    'HTML скрейпинг (ssbbilla.site)',
+    ('Fantastico', 'Direct'):    'PDF — pdfplumber / Azure OCR',
+    ('Kaufland',   'Direct'):    'HTML скрейпинг (kaufland.bg)',
+    ('Billa',      'Glovo'):     'Glovo приложение',
+    ('Fantastico', 'Glovo'):     'Glovo приложение',
+    ('Kaufland',   'Glovo'):     'Glovo приложение',
+}
+
+def extraction_method(store, channel):
+    return _METHOD_MAP.get((store, channel), 'Скрейпинг')
+
+_CANAL_NOTE = (
+    'Канал: "Direct" = данни директно от сайта / брошурата на търговеца  |  '
+    '"Gladen.bg" = Hit Max промоции от платформата Gladen.bg  |  '
+    '"Glovo" = данни от приложението Glovo  |  '
+    'Метод: начинът на извличане — HTML скрейпинг, PDF текст или PDF OCR'
+)
 
 CAT_ORDER = [
     "Млечни продукти", "Яйца", "Месо", "Колбаси и деликатеси",
@@ -353,14 +374,44 @@ RULES = [
 def _extract_measure(s):
     """
     Try to extract (quantity, base_unit) from a string. Returns None if no match.
-    Handles: кг, г, гр (both are Bulgarian abbreviations for grams), л, мл, multipacks.
+    Handles: кг, г, гр (Bulgarian abbreviations for grams), л, мл, multipacks.
     Input must already be lowercased.
     """
-    # Multipack: "NxM г/гр/мл" — e.g. "3x300 г", "2x500мл"
-    m = re.search(r'(\d+)\s*[xх]\s*(\d+(?:[.,]\d+)?)\s*(гр?|мл)', s)
+    # Guard: skip date-like strings (e.g. "04.2026") — look numeric but aren't measurements
+    if re.match(r'^\d{2}\.\d{4}', s.strip()):
+        return None
+
+    # Promotional N+M multipack: "5+1 x 0.5 л" — total is (N+M) units
+    m = re.search(r'(\d+)\s*\+\s*(\d+)\s*[xх]\s*(\d+(?:[.,]\d+)?)\s*(кг|гр?|л(?!в)|мл)', s)
     if m:
-        n, q = int(m.group(1)), float(m.group(2).replace(',', '.'))
-        return (n * q, 'g') if m.group(3).startswith('г') else (n * q, 'ml')
+        n    = int(m.group(1)) + int(m.group(2))
+        q    = float(m.group(3).replace(',', '.'))
+        unit = m.group(4)
+        if unit == 'кг':
+            return n * q * 1000, 'g'
+        elif unit.startswith('г'):
+            return n * q, 'g'
+        elif unit == 'мл':
+            return n * q, 'ml'
+        else:  # л
+            return n * q * 1000, 'ml'
+
+    # Standard multipack: "NxM unit" — e.g. "3x300 г", "6x0.5 л", "2 х 500 мл"
+    # Now includes кг and л (was missing л — caused 6x0.5л to be parsed as 0.5л not 3л)
+    m = re.search(r'(\d+)\s*[xх]\s*(\d+(?:[.,]\d+)?)\s*(кг|гр?|л(?!в)|мл)', s)
+    if m:
+        n    = int(m.group(1))
+        q    = float(m.group(2).replace(',', '.'))
+        unit = m.group(3)
+        if unit == 'кг':
+            return n * q * 1000, 'g'
+        elif unit.startswith('г'):
+            return n * q, 'g'
+        elif unit == 'мл':
+            return n * q, 'ml'
+        else:  # л
+            return n * q * 1000, 'ml'
+
     # Kilograms — must come before gram rule to avoid "кг" partially matching "г"
     m = re.search(r'([\d]+[.,]?[\d]*)\s*кг', s)
     if m:
@@ -384,6 +435,10 @@ def _extract_measure(s):
 def parse_unit(unit_str, product_name=""):
     u    = (unit_str or "").strip().lower()
     name = (product_name or "").strip().lower()
+
+    # Discard unit fields that look like dates (e.g. "04.2026 г") — not measurements
+    if u and re.match(r'^\d{2}\.\d{4}', u):
+        u = ""
 
     try:
         # Standalone "кг" = price IS per kilogram
@@ -435,12 +490,121 @@ def calc_norm(price, qty, base):
     if not (price and qty and qty > 0):
         return None, None
     if base == 'g':
-        return round((price / qty) * 1000, 2), 'лв./кг'
+        return round((price / qty) * 1000, 2), '€/кг'
     if base == 'ml':
-        return round((price / qty) * 1000, 2), 'лв./л'
+        return round((price / qty) * 1000, 2), '€/л'
     if base == 'pcs':
-        return round(price / qty, 2), 'лв./бр'
+        return round(price / qty, 2), '€/бр'
     return None, None
+
+
+# ── Step 1b: Post-enrich norm-price audit ────────────────────────────────────
+
+# Sanity bounds per norm_unit — catches parsing errors that produce absurd prices
+_NORM_BOUNDS = {
+    '€/кг': (0.10,  500.0),   # €0.10–€500 per kg
+    '€/л':  (0.05,  200.0),   # €0.05–€200 per litre
+    '€/бр': (0.01, 1000.0),   # €0.01–€1000 per piece
+}
+
+
+def audit_and_fix_norm_prices(enriched: list[dict]) -> tuple[int, int]:
+    """
+    Second-pass audit run after enrich() (and after AI classification).
+
+    Two checks per record:
+      A. Packaging mismatch — product name contains multipack info (e.g. "6 х 0.5 л")
+         that gives a LARGER total than what was derived from the unit field alone.
+         When found, recalculate norm_price using the name-derived total.
+      B. Implausible norm_price — value outside per-unit sanity bounds (likely a
+         parsing error). Clears norm_price so the record lands in "За преглед".
+
+    Mutates enriched in place. Returns (fixed, flagged).
+    """
+    fixed = []
+    flagged = []
+
+    for it in enriched:
+        name      = (it.get('product_name') or '').strip()
+        unit_raw  = (it.get('unit') or '').strip()
+        price     = it.get('price') or 0
+        cur_qty   = it.get('parsed_qty')
+        cur_base  = it.get('base_unit')
+        cur_norm  = it.get('norm_price')
+        cur_nunit = it.get('norm_unit') or ''
+
+        # ── Check A: does the product NAME reveal better packaging info? ──────
+        # Re-parse with full name as fallback source — this catches cases where
+        # unit="бр" or unit=None but name="Пиринско бира 6 х 0.5 л кен"
+        name_qty, name_base = parse_unit(unit_raw, name)
+
+        better = (
+            name_qty and name_base and (
+                cur_qty is None or cur_base is None or
+                (name_base == cur_base and name_qty > cur_qty * 1.05)
+            )
+        )
+        if better:
+            new_norm, new_nunit = calc_norm(price, name_qty, name_base)
+            if new_norm and (cur_norm is None or abs(new_norm - (cur_norm or 0)) > 0.005):
+                fixed.append({
+                    'product': it['product_name'],
+                    'store':   it['source_store'],
+                    'unit':    unit_raw or '(none)',
+                    'qty_old': cur_qty,   'qty_new': name_qty,
+                    'base':    name_base,
+                    'norm_old': cur_norm, 'norm_new': new_norm,
+                })
+                it['parsed_qty'] = name_qty
+                it['base_unit']  = name_base
+                it['norm_price'] = new_norm
+                it['norm_unit']  = new_nunit
+
+        # ── Check B: implausible norm_price ───────────────────────────────────
+        norm_now  = it.get('norm_price')
+        nunit_now = it.get('norm_unit') or ''
+        if norm_now is not None:
+            lo, hi = _NORM_BOUNDS.get(nunit_now, (0.01, 5000.0))
+            if not (lo <= norm_now <= hi):
+                flagged.append({
+                    'product': it['product_name'],
+                    'store':   it['source_store'],
+                    'unit':    unit_raw or '(none)',
+                    'price':   price,
+                    'norm':    norm_now,
+                    'nunit':   nunit_now,
+                })
+                # Clear the bad norm so it appears in "За преглед" for manual review
+                it['norm_price'] = None
+                it['norm_unit']  = None
+
+    # ── Report ────────────────────────────────────────────────────────────────
+    print(f"\n── Norm Price Audit ──", flush=True)
+    if fixed:
+        print(f"  Fixed {len(fixed)} records (name had richer packaging info than unit field):",
+              flush=True)
+        for f in fixed:
+            old_s = f"{f['norm_old']:.2f}" if f['norm_old'] else 'None'
+            print(f"    [{f['store']}] {f['name'][:65]}" if 'name' in f else
+                  f"    [{f['store']}] {f['product'][:65]}", flush=True)
+            print(f"      unit='{f['unit']}' qty {f['qty_old']}→{f['qty_new']} {f['base']}"
+                  f"  norm {old_s}→{f['norm_new']:.2f}", flush=True)
+    else:
+        print("  No packaging mismatches found.", flush=True)
+
+    if flagged:
+        print(f"  Cleared {len(flagged)} implausible norm prices (moved to За преглед):",
+              flush=True)
+        for f in flagged[:15]:
+            print(f"    [{f['store']}] {f['product'][:65]}", flush=True)
+            print(f"      unit='{f['unit']}' price={f['price']:.2f}"
+                  f"  norm={f['norm']:.2f} {f['nunit']}", flush=True)
+        if len(flagged) > 15:
+            print(f"    … and {len(flagged)-15} more.", flush=True)
+    else:
+        print("  No implausible norm prices found.", flush=True)
+
+    return len(fixed), len(flagged)
 
 
 # ── Step 2: Classifier ────────────────────────────────────────────────────────
@@ -574,19 +738,23 @@ def build_sheet1(wb, groups):
     ws.sheet_properties.tabColor = "00B050"
 
     COLS   = ["Категория", "Подкатегория", "#", "Продукт", "Магазин", "Канал",
-              "Промо цена", "Опаковка", "Цена кг/л/бр", "Единица", "Отстъпка", "URL"]
-    WIDTHS = [18, 22, 4, 50, 20, 10, 14, 14, 14, 10, 11, 45]
-    FMTS   = [None]*6 + [MONEY_FMT, None, NORM_FMT, None, PCT_FMT, None]
+              "Промо цена", "Опаковка", "Цена кг/л/бр", "Единица", "Отстъпка", "Метод", "URL"]
+    WIDTHS = [18, 22, 4, 50, 20, 10, 14, 14, 14, 10, 11, 28, 45]
+    FMTS   = [None]*6 + [MONEY_FMT, None, NORM_FMT, None, PCT_FMT, None, None]
     N      = len(COLS)
 
-    title_row(ws, 1, "Най-евтини продукти по категория — Промоции 26.03–01.04.2026", N)
+    title_row(ws, 1, "Най-евтини продукти по категория — Промоции", N)
     title_row(ws, 2,
-              "Цените са нормализирани (лв./кг, лв./л, лв./бр) за честно сравнение между "
+              "Цените са нормализирани (€/кг, €/л, €/бр) за честно сравнение между "
               "различни размери опаковки. Показани са до 5 най-евтини варианта на подкатегория.", N, True)
+    ws.merge_cells(start_row=3, start_column=1, end_row=3, end_column=N)
+    _cn = ws.cell(row=3, column=1, value=_CANAL_NOTE)
+    _cn.font = NOTE_FONT
+    _cn.alignment = Alignment(horizontal='left')
     header_row(ws, 4, COLS)
     ws.freeze_panes = "A5"
     set_widths(ws, WIDTHS)
-    ws.row_dimensions[3].height = 6
+    ws.row_dimensions[3].height = 14
 
     row, prev_cat = 5, None
     for (cat, sub), items in ordered_groups(groups):
@@ -606,7 +774,8 @@ def build_sheet1(wb, groups):
             url  = it.get('source_url') or ''
             vals = ["", sub, rank, it['product_name'], it['source_store'],
                     it['source_channel'], it['price'], it.get('unit') or '',
-                    it['norm_price'], it['norm_unit'] or '', it['discount'], url]
+                    it['norm_price'], it['norm_unit'] or '', it['discount'],
+                    extraction_method(it['source_store'], it['source_channel']), url]
             for col, (v, fmt) in enumerate(zip(vals, FMTS), 1):
                 c = ws.cell(row=row, column=col, value=v)
                 if col == N and url:
@@ -627,24 +796,28 @@ def build_sheet1(wb, groups):
         row += 1
 
 
-# ── Sheet 2: All by category ─────────────────────────────────────────────────
+# ── Sheet 2: Всички по категория ─────────────────────────────────────────────
 def build_sheet1b(wb, enriched):
-    ws = wb.create_sheet("All by category")
+    ws = wb.create_sheet("Всички по категория")
     ws.sheet_properties.tabColor = "00B0F0"
 
     COLS   = ["Категория", "Подкатегория", "#", "Продукт", "Магазин", "Канал",
-              "Промо цена", "Опаковка", "Цена кг/л/бр", "Единица", "Отстъпка", "URL"]
-    WIDTHS = [18, 22, 4, 50, 20, 10, 14, 14, 14, 10, 11, 45]
-    FMTS   = [None]*6 + [MONEY_FMT, None, NORM_FMT, None, PCT_FMT, None]
+              "Промо цена", "Опаковка", "Цена кг/л/бр", "Единица", "Отстъпка", "Метод", "URL"]
+    WIDTHS = [18, 22, 4, 50, 20, 10, 14, 14, 14, 10, 11, 28, 45]
+    FMTS   = [None]*6 + [MONEY_FMT, None, NORM_FMT, None, PCT_FMT, None, None]
     N      = len(COLS)
 
     title_row(ws, 1, "Всички продукти по категория — Промоции", N)
     title_row(ws, 2,
               "Всички продукти, групирани по категория и подкатегория, наредени по нормализирана цена.", N, True)
+    ws.merge_cells(start_row=3, start_column=1, end_row=3, end_column=N)
+    _cn = ws.cell(row=3, column=1, value=_CANAL_NOTE)
+    _cn.font = NOTE_FONT
+    _cn.alignment = Alignment(horizontal='left')
     header_row(ws, 4, COLS)
     ws.freeze_panes = "A5"
     set_widths(ws, WIDTHS)
-    ws.row_dimensions[3].height = 6
+    ws.row_dimensions[3].height = 14
 
     all_groups = defaultdict(list)
     for it in enriched:
@@ -668,7 +841,8 @@ def build_sheet1b(wb, enriched):
             url  = it.get('source_url') or ''
             vals = ["", sub, rank, it['product_name'], it['source_store'],
                     it['source_channel'], it['price'], it.get('unit') or '',
-                    it['norm_price'], it['norm_unit'] or '', it['discount'], url]
+                    it['norm_price'], it['norm_unit'] or '', it['discount'],
+                    extraction_method(it['source_store'], it['source_channel']), url]
             for col, (v, fmt) in enumerate(zip(vals, FMTS), 1):
                 c = ws.cell(row=row, column=col, value=v)
                 if col == N and url:
@@ -695,17 +869,21 @@ def build_sheet2(wb, groups):
     ws.sheet_properties.tabColor = "2E75B6"
 
     COLS   = ["Категория", "Подкатегория", "Най-евтин продукт", "Магазин", "Канал",
-              "Промо цена", "Опаковка", "Норм. цена", "Единица", "# Алтернативи", "URL"]
-    WIDTHS = [18, 22, 50, 20, 10, 14, 14, 16, 10, 14, 45]
-    FMTS   = [None]*5 + [MONEY_FMT, None, NORM_FMT, None, None, None]
+              "Промо цена", "Опаковка", "Норм. цена", "Единица", "# Алтернативи", "Метод", "URL"]
+    WIDTHS = [18, 22, 50, 20, 10, 14, 14, 16, 10, 14, 28, 45]
+    FMTS   = [None]*5 + [MONEY_FMT, None, NORM_FMT, None, None, None, None]
     N      = len(COLS)
 
     title_row(ws, 1, "Най-евтиният продукт за всяка подкатегория", N)
     title_row(ws, 2, "Бърза справка — само един ред на подкатегория, с найевтиния наличен продукт.", N, True)
+    ws.merge_cells(start_row=3, start_column=1, end_row=3, end_column=N)
+    _cn = ws.cell(row=3, column=1, value=_CANAL_NOTE)
+    _cn.font = NOTE_FONT
+    _cn.alignment = Alignment(horizontal='left')
     header_row(ws, 4, COLS)
     ws.freeze_panes = "A5"
     set_widths(ws, WIDTHS)
-    ws.row_dimensions[3].height = 6
+    ws.row_dimensions[3].height = 14
 
     row, prev_cat, even = 5, None, False
     for (cat, sub), items in ordered_groups(groups):
@@ -723,7 +901,8 @@ def build_sheet2(wb, groups):
         url  = best.get('source_url') or ''
         vals = [cat, sub, best['product_name'], best['source_store'], best['source_channel'],
                 best['price'], best.get('unit') or '', best['norm_price'],
-                best['norm_unit'] or '', count - 1, url]
+                best['norm_unit'] or '', count - 1,
+                extraction_method(best['source_store'], best['source_channel']), url]
         for col, (v, fmt) in enumerate(zip(vals, FMTS), 1):
             c = ws.cell(row=row, column=col, value=v)
             if col == N and url:
@@ -782,14 +961,16 @@ def auto_clusters(items):
     kws = [keywords(it['product_name']) for it in items]
     for i in range(n):
         for j in range(i + 1, n):
-            if items[i]['source_store'] != items[j]['source_store']:
+            si = (items[i]['source_store'], items[i]['source_channel'])
+            sj = (items[j]['source_store'], items[j]['source_channel'])
+            if si != sj:
                 if len(kws[i] & kws[j]) >= 2:
                     uf.union(i, j)
     buckets = defaultdict(list)
     for i in range(n):
         buckets[uf.find(i)].append(items[i])
     return [cl for cl in buckets.values()
-            if len({it['source_store'] for it in cl}) >= 2]
+            if len({(it['source_store'], it['source_channel']) for it in cl}) >= 2]
 
 
 # ── Sheet 3: Сравнение (авто) ─────────────────────────────────────────────────
@@ -801,10 +982,10 @@ def build_sheet3(wb, enriched):
     BASE_COLS = ["Категория", "Подкатегория", "Общи думи"]
     STORE_COLS = []
     for i in range(1, S + 1):
-        STORE_COLS += [f"Продукт {i}", f"Магазин {i}", f"Цена {i}", f"Норм. цена {i}"]
+        STORE_COLS += [f"Продукт {i}", f"Магазин {i}", f"Канал {i}", f"Цена {i}", f"Норм. цена {i}", f"URL {i}"]
     ALL = BASE_COLS + STORE_COLS
     N   = len(ALL)
-    FMTS = [None, None, None] + [None, None, MONEY_FMT, NORM_FMT] * S
+    FMTS = [None, None, None] + [None, None, None, MONEY_FMT, NORM_FMT, None] * S
 
     title_row(ws, 1, "Автоматично сравнение — съвпадения по ключови думи (Union-Find)", N)
     title_row(ws, 2,
@@ -812,7 +993,7 @@ def build_sheet3(wb, enriched):
               "с ≥2 съвпадащи ключови думи. Подредени по брой магазини (повече = по-горе).", N, True)
     header_row(ws, 4, ALL)
     ws.freeze_panes = "A5"
-    set_widths(ws, [18, 22, 28] + [36, 16, 12, 12] * S)
+    set_widths(ws, [18, 22, 28] + [36, 16, 10, 12, 12, 40] * S)
     ws.row_dimensions[3].height = 6
 
     by_sub = defaultdict(list)
@@ -826,7 +1007,7 @@ def build_sheet3(wb, enriched):
         clusters = auto_clusters(by_sub[key])
         if not clusters:
             continue
-        clusters.sort(key=lambda cl: len({x['source_store'] for x in cl}), reverse=True)
+        clusters.sort(key=lambda cl: len({(x['source_store'], x['source_channel']) for x in cl}), reverse=True)
 
         if cat != prev_cat:
             cat_header(ws, row, cat, N)
@@ -842,20 +1023,27 @@ def build_sheet3(wb, enriched):
 
             vals = [cat, sub, ', '.join(sorted(common)[:6])]
             for it in cl[:S]:
-                vals += [it['product_name'], it['source_store'],
-                         it['price'], it['norm_price'] or '']
+                vals += [it['product_name'], it['source_store'], it['source_channel'],
+                         it['price'], it['norm_price'] or '',
+                         it.get('source_url') or '']
             while len(vals) < N:
                 vals.append('')
 
+            url_cols = {3 + 6*i + 6 for i in range(S)}  # URL columns (1-indexed)
             for col, (v, fmt) in enumerate(zip(vals[:N], FMTS[:N]), 1):
-                c = ws.cell(row=row, column=col, value=v)
-                c.font   = DATA_FONT
+                c = ws.cell(row=row, column=col, value=v if col not in url_cols else '')
+                if col in url_cols and v:
+                    c.value     = v
+                    c.font      = URL_FONT
+                    c.hyperlink = v
+                else:
+                    c.font = DATA_FONT
                 c.border = BORDER
                 if fill:
                     c.fill = fill
                 if fmt:
                     c.number_format = fmt
-                c.alignment = Alignment(wrap_text=(col in (3, 4, 8, 12, 16, 20)))
+                c.alignment = Alignment(wrap_text=(col in (3, 4)))
             ws.row_dimensions[row].height = 15
             row += 1
             total += 1
@@ -1007,7 +1195,7 @@ def ai_match(cfg, key, subcat, items):
     )
     lines = [
         f"{i+1}. [{it['source_store']}] {it['product_name']} — "
-        f"{it['price']:.2f} лв. ({it.get('unit') or 'н/п'})"
+        f"{it['price']:.2f} € ({it.get('unit') or 'н/п'})"
         for i, it in enumerate(items)
     ]
     prompt = (
@@ -1041,10 +1229,10 @@ def build_sheet4(wb, enriched, cfg, key):
     BASE_COLS  = ["Категория", "Подкатегория", "Група"]
     STORE_COLS = []
     for i in range(1, S + 1):
-        STORE_COLS += [f"Продукт {i}", f"Магазин {i}", f"Цена {i}", f"Норм. цена {i}"]
+        STORE_COLS += [f"Продукт {i}", f"Магазин {i}", f"Канал {i}", f"Цена {i}", f"Норм. цена {i}", f"URL {i}"]
     ALL  = BASE_COLS + STORE_COLS
     N    = len(ALL)
-    FMTS = [None, None, None] + [None, None, MONEY_FMT, NORM_FMT] * S
+    FMTS = [None, None, None] + [None, None, None, MONEY_FMT, NORM_FMT, None] * S
 
     title_row(ws, 1, "Сравнение с изкуствен интелект — Azure OpenAI GPT-4o", N)
     title_row(ws, 2,
@@ -1052,7 +1240,7 @@ def build_sheet4(wb, enriched, cfg, key):
               "Инструкция: да не се измислят съответствия — само при 100% сигурност.", N, True)
     header_row(ws, 4, ALL)
     ws.freeze_panes = "A5"
-    set_widths(ws, [18, 22, 8] + [36, 16, 12, 12] * S)
+    set_widths(ws, [18, 22, 8] + [36, 16, 10, 12, 12, 40] * S)
     ws.row_dimensions[3].height = 6
 
     if not key:
@@ -1077,14 +1265,14 @@ def build_sheet4(wb, enriched, cfg, key):
     for key_sub in sorted(by_sub, key=sort_key):
         cat, sub = key_sub
         pool     = by_sub[key_sub]
-        stores   = {it['source_store'] for it in pool}
+        stores   = {(it['source_store'], it['source_channel']) for it in pool}
         if len(stores) < 2:
             continue
 
         # Sample diverse across stores
         store_q = defaultdict(list)
         for it in pool:
-            store_q[it['source_store']].append(it)
+            store_q[(it['source_store'], it['source_channel'])].append(it)
         sampled = []
         while len(sampled) < max_items and any(store_q.values()):
             for st in list(store_q):
@@ -1108,7 +1296,7 @@ def build_sheet4(wb, enriched, cfg, key):
                 grp_items = [sampled[i - 1] for i in grp if 1 <= i <= len(sampled)]
             except (IndexError, TypeError):
                 continue
-            if len({it['source_store'] for it in grp_items}) < 2:
+            if len({(it['source_store'], it['source_channel']) for it in grp_items}) < 2:
                 continue
 
             grp_num += 1
@@ -1118,20 +1306,27 @@ def build_sheet4(wb, enriched, cfg, key):
 
             vals = [cat, sub, grp_num]
             for it in grp_items[:S]:
-                vals += [it['product_name'], it['source_store'],
-                         it['price'], it['norm_price'] or '']
+                vals += [it['product_name'], it['source_store'], it['source_channel'],
+                         it['price'], it['norm_price'] or '',
+                         it.get('source_url') or '']
             while len(vals) < N:
                 vals.append('')
 
+            url_cols = {3 + 6*i + 6 for i in range(S)}  # URL columns (1-indexed)
             for col, (v, fmt) in enumerate(zip(vals[:N], FMTS[:N]), 1):
-                c = ws.cell(row=row, column=col, value=v)
-                c.font   = DATA_FONT
+                c = ws.cell(row=row, column=col, value=v if col not in url_cols else '')
+                if col in url_cols and v:
+                    c.value     = v
+                    c.font      = URL_FONT
+                    c.hyperlink = v
+                else:
+                    c.font = DATA_FONT
                 c.border = BORDER
                 if fill:
                     c.fill = fill
                 if fmt:
                     c.number_format = fmt
-                c.alignment = Alignment(wrap_text=(col in (4, 8, 12, 16, 20)))
+                c.alignment = Alignment(wrap_text=(col in (4,)))
             ws.row_dimensions[row].height = 15
             row += 1
             total += 1
@@ -1154,13 +1349,13 @@ def build_sheet5(wb, enriched):
 
     COLS   = ["#", "Категория", "Подкатегория", "Продукт", "Магазин", "Канал",
               "Редовна цена", "Промо цена", "Отстъпка", "Спестяване",
-              "Опаковка", "Норм. цена", "Единица", "Промо период", "URL"]
-    WIDTHS = [5, 18, 22, 50, 18, 10, 14, 14, 10, 12, 14, 14, 10, 18, 55]
+              "Опаковка", "Норм. цена", "Единица", "Промо период", "Метод", "URL"]
+    WIDTHS = [5, 18, 22, 50, 18, 10, 14, 14, 10, 12, 14, 14, 10, 18, 28, 55]
     FMTS   = [None]*6 + [MONEY_FMT, MONEY_FMT, PCT_FMT, MONEY_FMT,
-                         None, NORM_FMT, None, None, None]
+                         None, NORM_FMT, None, None, None, None]
     N      = len(COLS)
 
-    title_row(ws, 1, f"Всички промоционални продукти — {len(enriched)} записа", N)
+    title_row(ws, 1, f"Всички промоционални продукти — {len(enriched)} записа  |  {_CANAL_NOTE}", N)
     header_row(ws, 2, COLS)
     ws.freeze_panes = "A3"
     ws.auto_filter.ref = f"A2:{get_column_letter(N)}2"
@@ -1177,7 +1372,8 @@ def build_sheet5(wb, enriched):
                 it['source_store'], it['source_channel'], reg, p,
                 it['discount'], sav, it.get('unit') or '',
                 it['norm_price'], it['norm_unit'] or '',
-                it.get('promo_period') or '', url]
+                it.get('promo_period') or '',
+                extraction_method(it['source_store'], it['source_channel']), url]
         fill = GRAY if i % 2 == 0 else None
         for col, (v, fmt) in enumerate(zip(vals, FMTS), 1):
             c = ws.cell(row=r, column=col, value=v)
@@ -1207,8 +1403,8 @@ def build_sheet6(wb, enriched):
 
     COLS   = ["#", "Продукт", "Магазин", "Промо цена", "Опаковка (сурово)",
               "Причина", "Текуща категория",
-              "Правилна категория", "Правилна подкатегория", "Бележка", "URL"]
-    WIDTHS = [4, 50, 16, 12, 16, 28, 20, 22, 22, 30, 45]
+              "Правилна категория", "Правилна подкатегория", "Бележка", "Метод", "URL"]
+    WIDTHS = [4, 50, 16, 12, 16, 28, 20, 22, 22, 30, 28, 45]
     N      = len(COLS)
 
     title_row(ws, 1, f"Продукти за преглед — {len(review)} записа", N)
@@ -1216,10 +1412,14 @@ def build_sheet6(wb, enriched):
               "Попълнете 'Правилна категория' и 'Правилна подкатегория', след което добавете "
               "корекциите в manual_overrides.json → ключ 'overrides'.", N, True)
     ws.row_dimensions[2].height = 24
+    ws.merge_cells(start_row=3, start_column=1, end_row=3, end_column=N)
+    _cn = ws.cell(row=3, column=1, value=_CANAL_NOTE)
+    _cn.font = NOTE_FONT
+    _cn.alignment = Alignment(horizontal='left')
     header_row(ws, 4, COLS)
     ws.freeze_panes = "A5"
     set_widths(ws, WIDTHS)
-    ws.row_dimensions[3].height = 6
+    ws.row_dimensions[3].height = 14
 
     dv = DataValidation(
         type="list",
@@ -1245,9 +1445,9 @@ def build_sheet6(wb, enriched):
         url  = it.get('source_url') or ''
         vals = [i, it['product_name'], it['source_store'], it['price'],
                 it.get('unit') or '(няма)', reason, it['category'],
-                '', '', '', url]
+                '', '', '', extraction_method(it['source_store'], it['source_channel']), url]
         fill = GRAY if i % 2 == 0 else None
-        FMTS = [None, None, None, MONEY_FMT, None, None, None, None, None, None, None]
+        FMTS = [None, None, None, MONEY_FMT, None, None, None, None, None, None, None, None]
         for col, (v, fmt) in enumerate(zip(vals, FMTS), 1):
             c = ws.cell(row=r, column=col, value=v)
             if col == N and url:
@@ -1328,13 +1528,24 @@ def main(args=None):
                     groups[(it['category'], it['subcategory'])].append(it)
             print(f"  Подкатегории след ИИ: {len(groups)}", flush=True)
 
+    # ── Post-enrich audit: fix packaging mismatches + clear implausible prices ──
+    n_fixed, n_flagged = audit_and_fix_norm_prices(enriched)
+    if n_fixed or n_flagged:
+        # Rebuild groups with corrected norm prices
+        groups = defaultdict(list)
+        for it in enriched:
+            if it['norm_price'] is not None and it['category'] != 'Некласифицирани':
+                groups[(it['category'], it['subcategory'])].append(it)
+        with_norm = sum(1 for it in enriched if it['norm_price'] is not None)
+        print(f"  С нормализирана цена след одит: {with_norm}/{len(enriched)}", flush=True)
+
     wb = Workbook()
     wb.remove(wb.active)
 
     print("  Лист 1: Най-евтини по категория...", flush=True)
     build_sheet1(wb, groups)
 
-    print("  Лист 2: All by category...", flush=True)
+    print("  Лист 2: Всички по категория...", flush=True)
     build_sheet1b(wb, enriched)
 
     print("  Лист 3: Обобщение...", flush=True)
@@ -1369,8 +1580,16 @@ def main(args=None):
     no_unit = n - with_norm
     print(f"  Некласифицирани: {unclass}  |  Без единица: {no_unit}", flush=True)
 
-    # ── English version (--english flag) ──────────────────────────────────────
-    if args and args.english:
+    # ── English version ────────────────────────────────────────────────────────
+    gen_english = args and args.english
+    if not gen_english:
+        try:
+            answer = input("\nГенериране на английска версия? [д/n]: ").strip().lower()
+            gen_english = answer in ('д', 'y', 'да', 'yes', '1')
+        except EOFError:
+            pass  # non-interactive (piped/CI) — skip
+
+    if gen_english:
         if not az_key:
             print("\nПредупреждение: Azure OpenAI ключът не е наличен — "
                   "английската версия не е генерирана.", flush=True)
@@ -1395,7 +1614,7 @@ if __name__ == '__main__':
     _parser = _ap.ArgumentParser(description='Generate Bulgarian promo price report.')
     _parser.add_argument(
         '--english', action='store_true',
-        help='Also generate an English copy (<name>_en.xlsx) via GPT-4o translation.',
+        help='Skip the prompt and always generate an English copy (<name>_en.xlsx).',
     )
     _args = _parser.parse_args()
     main(_args)

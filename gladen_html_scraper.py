@@ -17,10 +17,10 @@ from pathlib import Path
 import requests
 
 # ── Config ────────────────────────────────────────────────────────────────────
-SOURCE_STORE = "Gladen.bg / Hit Max"
-SOURCE_CHANNEL = "Direct"
+SOURCE_STORE = "Hit Max"
+SOURCE_CHANNEL = "Gladen.bg"
 SOURCE_URL_BASE = "https://gladen.bg/promotions"
-PROMO_PERIOD = "02.04 - 08.04.2026"
+PROMO_PERIOD = "16.04 - 22.04.2026"
 EXTRACTION_DATE = date.today().isoformat()
 MAX_PAGES = 42  # 1,000 products / 24 per page
 
@@ -218,7 +218,7 @@ def merge_into_master(new_items: list[dict]) -> int:
         master = json.load(f)
 
     before = len(master)
-    master = [r for r in master if r.get('source_store') != SOURCE_STORE]
+    master = [r for r in master if r.get('source_store') not in {SOURCE_STORE, "Gladen.bg / Hit Max"}]
     removed = before - len(master)
 
     master.extend(new_items)

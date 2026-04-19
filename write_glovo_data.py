@@ -13,27 +13,22 @@ sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
 MASTER_PATH = Path("bulgarian_promo_prices_merged.json")
 EXTRACTION_DATE = date.today().isoformat()
-PROMO_PERIOD = "02.04 - 08.04.2026"
+PROMO_PERIOD = "16.04 - 22.04.2026"
 
-# ── Kaufland Glovo — 16 Easter products scraped ──────────────────────────────
-kaufland_glovo = [
-    {"name": "Козунак с шоколад и портокалови корички 400г", "promo": 6.18, "reg": 8.70, "unit": "400 г"},
-    {"name": "Козунак с орехов пълнеж 400г", "promo": 5.79, "reg": 7.78, "unit": "400 г"},
-    {"name": "Брей! Козунак ръчно плетен локум, стафиди 500г", "promo": 3.68, "reg": 5.28, "unit": "500 г"},
-    {"name": "MANIA Козунак Panettone стафиди и портокал 750 г", "promo": 8.98, "reg": 12.89, "unit": "750 г"},
-    {"name": "MANIA Козунак Panettone с шоколад 750 г", "promo": 8.98, "reg": 12.89, "unit": "750 г"},
-    {"name": "Елиаз Козунак капчица 450 г", "promo": 5.28, "reg": 6.94, "unit": "450 г"},
-    {"name": "Cake Mania Брьош козунак класик 400г", "promo": 4.28, "reg": 5.26, "unit": "400 г"},
-    {"name": "Домашни курабии, традиционни, 250 г", "promo": 2.44, "reg": 3.11, "unit": "250 г"},
-    {"name": "CAKE MANIA Козунак Панетоне стафиди 500 г", "promo": 5.98, "reg": 11.52, "unit": "500 г"},
-    {"name": "Домашен козунак със стафиди 400 г", "promo": 2.44, "reg": 3.38, "unit": "400 г"},
-    {"name": "Dolce Forneria Panettone Кекс класик 1000 г", "promo": 15.98, "reg": 21.30, "unit": "1000 г"},
-    {"name": "CAKE MANIA Козунак Панетоне шоколад 500 г", "promo": 5.98, "reg": 11.52, "unit": "500 г"},
-    {"name": "Домашен козунак класически 400г", "promo": 1.08, "reg": 2.70, "unit": "400 г"},
-    {"name": "Mania Козунак със стафиди /без консерванти/ 400 г", "promo": 3.48, "reg": 6.24, "unit": "400 г"},
-    {"name": "Брьош плитка с ванилов крем и шоколад 300г", "promo": 4.48, "reg": 5.85, "unit": "300 г"},
-    {"name": "Козунак плодов микс, орехи, белгийски шоколад 600 г", "promo": 8.39, "reg": 10.85, "unit": "600 г"},
-]
+# ── Glovo store-name normalisation ───────────────────────────────────────────
+# Maps non-standard Glovo store names → (source_store, source_channel).
+# Glovo sometimes lists branded/virtual stores (e.g. "Coca-Cola Real Magic")
+# that are not physical retailers. Add mappings here as they appear.
+# "Coca-Cola Real Magic" — Coca-Cola branded virtual store on Glovo BG.
+#   Not a physical retailer; skip or reclassify if/when encountered.
+GLOVO_STORE_MAP: dict[str, tuple[str, str]] = {
+    # "StoreName on Glovo": ("ActualStore", "Glovo"),
+    # "Coca-Cola Real Magic": ("???", "Glovo"),  # unknown retailer — investigate
+}
+
+# ── Kaufland Glovo — CW16: not available (Glovo blocks non-BG IPs) ────────────
+# Update manually from Glovo app when available
+kaufland_glovo = []
 
 kaufland_glovo_records = [
     {
@@ -49,75 +44,9 @@ kaufland_glovo_records = [
 ]
 print(f"Kaufland Glovo: {len(kaufland_glovo_records)} products")
 
-# ── Billa Glovo — 66 products scraped from ВЕЛИКДЕН + BILLA PREMIUM section ──
-billa_glovo_raw = [
-    ("VILLA MEDEN Вино Шардоне 0.75 Л", 15.63, 21.49, "0.75 л"),
-    ("VILLA MEDEN Вино К.Сов&Мерло&Сира 0.75 Л", 15.63, 21.49, "0.75 л"),
-    ("VILLA MEDEN Вино Розе 0.75 Л", 15.63, 21.49, "0.75 л"),
-    ("BILLA PREMIUM Паста CASARECCE 500 ГР", 3.11, 4.28, "500 г"),
-    ("VILLA MEDEN Вино Совиньон Блан 0.75 Л", 15.63, 21.49, "0.75 л"),
-    ("Devin Изворна вода 8 X 0.5 Л", 4.87, 7.16, "8x0.5 л"),
-    ("SOL VINEUS Розе 0.75 Л", 10.39, 12.99, "0.75 л"),
-    ("BILLA Бри 200 ГР", 3.89, 5.98, "200 г"),
-    ("BILLA Premium Фусили Pasta 500 ГР", 2.99, 4.19, "500 г"),
-    ("BILLA Premium Спагети Spaghetti 500 ГР", 2.99, 4.19, "500 г"),
-    ("BILLA Premium Суджук от телешко и говеждо месо 160 ГР", 8.98, 13.98, "160 г"),
-    ("Billa Premium Талиатели с манатарки 250 ГР", 4.79, 6.75, "250 г"),
-    ("Billa Premium Чипс с люти чушки 100 ГР", 3.50, 4.50, "100 г"),
-    ("BILLA Premium Шпек 100 ГР", 4.69, 6.49, "100 г"),
-    ("BILLA Premium Песто дженовезе 130 ГР", 4.87, 5.89, "130 г"),
-    ("BILLA Premium Чили мелничка 35 ГР", 2.99, 4.09, "35 г"),
-    ("BILLA Premium Хималайска сол мелничка 110 ГР", 3.29, 4.09, "110 г"),
-    ("BILLA Premium Tон филе в собствен сос 200 ГР", 8.98, 10.99, "200 г"),
-    ("Billa Premium Бисквити с черен касис и ябълка 80 ГР", 5.07, 5.98, "80 г"),
-    ("BILLA Premium Пипер микс зърна мелничка 40 ГР", 4.99, 6.08, "40 г"),
-    ("Billa Premium Глазура с балсамов оцет от Модена 250 МЛ", 3.99, 4.99, "250 мл"),
-    ("Billa Premium Горчица лимон и джинджифил 120 ГР", 3.50, 5.98, "120 г"),
-    ("Billa Premium Морска Сол С Черен Пипер С Вкус На Трюфел 100 ГР", 3.99, 4.99, "100 г"),
-    ("BILLA PREMIUM Пушена сьомга в рапично масло 120 ГР", 7.80, 9.99, "120 г"),
-    ("BILLA Premium Морска сол мелничка 110 ГР", 2.99, 3.99, "110 г"),
-    ("BILLA PREMIUM Микс италиански маслини без костилка 290 ГР", 6.83, 8.98, "290 г"),
-    ("Хамон Иберико Billa Premium 70 ГР", 9.37, 11.72, "70 г"),
-    ("BILLA PREMIUM Сос за паста Alfredo четири сирена 270 ГР", 5.85, 8.00, "270 г"),
-    ("Billa Premium Плосък хляб 200 ГР", 7.80, 9.99, "200 г"),
-    ("BILLA PREMIUM Вафлени пури Шам фъстък 35 ГР", 2.13, 2.80, "35 г"),
-    ("BILLA PREMIUM Маслиново масло ЕВ 750 МЛ", 17.99, 25.99, "750 мл"),
-    ("BILLA PREMIUM Ориз за ризото Арборио 500 ГР", 4.38, 6.30, "500 г"),
-    ("BILLA PREMIUM Зелени маслини 295 ГР", 6.83, 8.98, "295 г"),
-    ("Billa Premium Бяла подправка 250 МЛ", 4.40, 8.96, "250 мл"),
-    ("BILLA PREMIUM Мюсли с бадеми, шамфъстък и шоколадови парченца 300 ГР", 5.85, 7.49, "300 г"),
-    ("Billa Premium Ризото с чери домати 300 ГР", 6.98, 8.78, "300 г"),
-    ("Billa Premium Сос Къри 250 МЛ", 3.89, 5.59, "250 мл"),
-    ("BILLA PREMIUM Ориз Червен 500 ГР", 4.38, 6.30, "500 г"),
-    ("BILLA PREMIUM Ориз Черен 500 ГР", 4.38, 6.30, "500 г"),
-    ("КФМ Виенска шунка 160 ГР", 5.48, 8.00, "160 г"),
-    ("Тандем Габровска свинска пастърма 130 ГР", 5.98, 9.19, "130 г"),
-    ("Schweppes Газирана напитка мандарина 1.25 Л", 2.33, 2.95, "1.25 л"),
-    ("Schweppes Газирана напитка Розов Тоник 1.25 Л", 2.33, 2.95, "1.25 л"),
-    ("Schweppes Газирана напитка тоник 1.25 Л", 2.33, 2.95, "1.25 л"),
-    ("Тандем Луканка Майстор в занаята 170 ГР", 9.76, 14.30, "170 г"),
-    ("KINDER Шоколадова фигурка 55 ГР", 3.66, 4.87, "55 г"),
-    ("Майстор в занаята Телешка луканка 160 ГР", 9.76, 14.30, "160 г"),
-    ("KINDER Шокобонс 300 ГР", 12.46, 16.60, "300 г"),
-    ("Schweppes Газирана напитка битер лимон 1.25 Л", 2.33, 2.95, "1.25 л"),
-    ("HEINEKEN Бира мултипак 5+1х0.5 Л", 9.37, 13.24, "5+1x0.5 л"),
-    ("КФМ Старобългарска луканка слайс 150 ГР", 4.99, 7.20, "150 г"),
-    ("Бира Stella Artois мултипакет 4x0.5 Л", 6.79, 8.08, "4x0.5 л"),
-    ("HAPPY DAY сок Портокал 100% 1.5 Л", 7.22, 9.19, "1.5 л"),
-    ("Пиринско кен мултипак 6X0.5 Л", 6.49, 9.25, "6x0.5 л"),
-    ("RAFFAELO Великденско яйце 100 ГР", 7.61, 8.98, "100 г"),
-    ("CASTELLO Крема сирене ананас 125 ГР", 3.70, 5.50, "125 г"),
-    ("Камембер Castello 125 ГР", 4.48, 5.50, "125 г"),
-    ("CASTELLO Бри със синя плесен 150 ГР", 4.48, 5.50, "150 г"),
-    ("CASTELLO Крема сирене кокос и лайм 125 ГР", 3.70, 5.50, "125 г"),
-    ("Синьо сирене Castello 100 ГР", 3.89, 6.40, "100 г"),
-    ("CASTELLO Крема сирене домат и босилек 125 ГР", 3.70, 5.50, "125 г"),
-    ("Fort Burgozone Вино Мерло& Сира 0.75 Л", 11.52, 14.79, "0.75 л"),
-    ("Mezzek Вино Совиньон блан& Пино Гри 0.75 Л", 10.99, 14.79, "0.75 л"),
-    ("Mezzek Вино Каберне Совиньон 0.75 Л", 10.99, 14.79, "0.75 л"),
-    ("Mezzek Вино розе 0.75 Л", 10.99, 14.79, "0.75 л"),
-    ("Mezzek Вино Мерло 0.75 Л", 10.99, 14.79, "0.75 л"),
-]
+# ── Billa Glovo — CW16: not available (Glovo blocks non-BG IPs) ──────────────
+# Update manually from Glovo app when available
+billa_glovo_raw = []
 
 billa_glovo_records = [
     {
@@ -135,9 +64,9 @@ print(f"Billa Glovo: {len(billa_glovo_records)} products")
 
 # ── Kaufland Direct — parse from FireCrawl file ──────────────────────────────
 KAUFLAND_FILE = Path(
-    r"C:\Users\PVELINOV\.claude\projects\C--Users-PVELINOV-ODP-OneDrive-BG-FOOD-PRICES"
-    r"\609b30dc-ecb2-47a6-a596-86946a4455af\tool-results"
-    r"\mcp-claude_ai_firecrawl-firecrawl_scrape-1775572521193.txt"
+    r"C:\Users\PVELINOV\.claude\projects\C--AHA-OneDrive---AHA-BG-FOOD-PRICES"
+    r"\254abe44-33f2-47b8-9059-578d0a708f8e\tool-results"
+    r"\mcp-claude_ai_firecrawl-firecrawl_scrape-1776402811343.txt"
 )
 
 SEP     = '\\\\\n\\\\\n'
@@ -234,11 +163,8 @@ kaufland_direct = parse_kaufland_direct(md)
 print(f"Kaufland Direct: {len(kaufland_direct)} products")
 
 # ── Fantastico Glovo — parse from FireCrawl file ─────────────────────────────
-FANTASTICO_FILE = Path(
-    r"C:\Users\PVELINOV\.claude\projects\C--Users-PVELINOV-ODP-OneDrive-BG-FOOD-PRICES"
-    r"\609b30dc-ecb2-47a6-a596-86946a4455af\tool-results"
-    r"\mcp-claude_ai_firecrawl-firecrawl_scrape-1775572571216.txt"
-)
+# CW16: Fantastico Glovo not available — Glovo blocks non-BG IPs
+FANTASTICO_FILE = None
 
 _GLOVO_PROD_RE = re.compile(
     r'### (.+?)\n\n'
@@ -282,11 +208,15 @@ def parse_glovo_file(path, store, channel, url):
     return products
 
 print("\nParsing Fantastico Glovo...")
-fantastico_glovo = parse_glovo_file(
-    FANTASTICO_FILE,
-    store="Fantastico", channel="Glovo",
-    url="https://glovoapp.com/bg/bg/sofia/stores/coca-cola-real-magic-sof"
-)
+if FANTASTICO_FILE and Path(FANTASTICO_FILE).exists():
+    fantastico_glovo = parse_glovo_file(
+        FANTASTICO_FILE,
+        store="Fantastico", channel="Glovo",
+        url="https://glovoapp.com/bg/bg/sofia/stores/fantastico-sof",
+    )
+else:
+    print("  Skipped — no FireCrawl file available for this week")
+    fantastico_glovo = []
 print(f"Fantastico Glovo: {len(fantastico_glovo)} products")
 
 # ── Merge all into master ─────────────────────────────────────────────────────
