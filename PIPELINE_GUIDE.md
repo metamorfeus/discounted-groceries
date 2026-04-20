@@ -24,7 +24,7 @@ Fetches all promotion pages from `gladen.bg/promotions` directly via HTTP,
 parses discounted products (promo price < regular price), and merges into master.
 
 - **Source:** gladen.bg — live HTML, no browser needed
-- **Updates:** `Gladen.bg / Hit Max / Direct` records in master
+- **Updates:** `Hit Max / Gladen.bg` records in master (`source_store="Hit Max"`, `source_channel="Gladen.bg"`)
 - **Config to update each week:** `PROMO_PERIOD` constant at top of file
 - **Output:** ~991 records merged into master
 
@@ -170,7 +170,7 @@ Each record in `bulgarian_promo_prices_merged.json`:
 }
 ```
 
-**Channels:** `Direct` = retailer's own website/brochure; `Glovo` = Glovo app listing
+**Channels:** `Direct` = retailer's own website/brochure; `Glovo` = Glovo app listing; `Gladen.bg` = Gladen aggregator (used only for Hit Max records)
 
 ---
 
@@ -194,7 +194,7 @@ Each record in `bulgarian_promo_prices_merged.json`:
 
 | Store | Channel | Script | Method |
 |-------|---------|--------|--------|
-| Gladen.bg / Hit Max | Direct | `gladen_html_scraper.py` | HTTP scrape |
+| Hit Max | Gladen.bg | `gladen_html_scraper.py` | HTTP scrape |
 | Billa | Direct | `billa_scraper.py` | HTTP scrape (ssbbilla.site) |
 | Billa | Direct | `billa_pdf_pipeline.py` | PDF OCR (supplementary) |
 | Billa | Glovo | `write_glovo_data.py` | FireCrawl / manual |
@@ -209,7 +209,7 @@ Each record in `bulgarian_promo_prices_merged.json`:
 
 | Source | Records |
 |--------|---------|
-| Gladen.bg / Hit Max / Direct | ~991 |
+| Hit Max / Gladen.bg | ~991 |
 | Kaufland / Direct | ~734 |
 | Billa / Direct (ssbbilla.site) | ~319 |
 | Fantastico / Direct | ~189 |

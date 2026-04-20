@@ -1,4 +1,6 @@
 # Bulgarian Grocery Promotions Scraper — Project Handoff
+> **Historical document — Session 1 (2026-03-29) only.** Prices in this document are in BGN; the current schema stores all prices in EUR (BGN ÷ 1.95583). See CLAUDE.md for the current pipeline and schema.
+
 **Last updated:** 2026-03-29
 **Extraction date:** 2026-03-29 (Sunday morning, ~07:00–10:00 EET)
 **Tool used:** FireCrawl MCP (`mcp__7b525947-7a06-4c60-a4a5-0ffb362202c4`)

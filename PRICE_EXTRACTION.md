@@ -81,74 +81,40 @@ The script writes directly into `bulgarian_promo_prices_merged.json`, replacing 
 
 ---
 
-### Fantastico — PDF parser (`fantastico_pdf_parser.py`)
+### Fantastico — unified pipeline (`fantastico_pipeline.py`)
 
-**Source:** Fantastico weekly brochure PDF (machine-readable text layer)
-Obtained from: `https://www.fantastico.bg/special-offers` (FlippingBook viewer)
-
-**How prices are extracted:**
-
-Uses `pdfplumber` to extract words with bounding boxes (x/y coordinates) from the PDF.
-
-1. Finds all BGN price words (`X.XX ЛВ.`) as spatial anchors for product locations
-2. For each anchor, collects all words in the same x-column above it
-3. Finds EUR prices (`X.XX €`) in that text region:
-   - First EUR = regular/old price → stored directly as `regular_price`
-   - Second EUR = promo price → stored as `promo_price`
-   - If only one EUR and a discount % (`-19%`) is present, back-calculates the regular price
-   - If no EUR found, converts BGN anchor ÷ 1.95583 as fallback
-4. Product name is assembled from non-price Cyrillic lines in the same column region
-
-**How to run:**
-
-First, manually download the PDF from the FlippingBook viewer and place it at:
-`fantastico_work/fantastico_brochure.pdf`
-
-Then:
-
-```bash
-python fantastico_pdf_parser.py
-
-# Dry run (show sample results without writing)
-python fantastico_pdf_parser.py --dry-run
-```
-
-The script writes directly into `bulgarian_promo_prices_merged.json`, replacing old Fantastico Direct records.
-
----
-
-### Fantastico — OCR pipeline (`fantastico_ocr_pipeline.py`)
-
-**Source:** Same Fantastico brochure PDF, but processed via Azure Document Intelligence OCR.
-Use this when the PDF has scanned/image pages without a text layer.
+**Source:** `https://www.fantastico.bg/special-offers` (FlippingBook brochure viewer)
 
 **How prices are extracted:**
 
-OCR output follows the format: `OLD_EUR € DISCOUNT% NEW_EUR €\nBGN ЛВ.`
-Example: `"2.79 € -19% 2.25 €\n4.40 ЛВ."`
+Fully automated — no manual steps:
 
-Two-pass parsing of the OCR text stream:
-
-- **Pass 1 (BGN-anchored):** `X.XX ЛВ.` marks the end of each product block. Looks back in the text window for a EUR pair (`OLD € NEW €`) and uses those EUR values directly. If only single EUR prices are found, first = regular, last = promo. If no EUR at all, converts BGN ÷ 1.95583.
-- **Pass 2 (EUR-pair-only):** catches products where the BGN price was missed by OCR. Anchors on EUR pairs not already captured in Pass 1.
+1. Scrapes `fantastico.bg/special-offers` to find the active FlippingBook URL
+2. Launches headless Chromium (Playwright), opens the viewer, clicks Download → "Full Flipbook"
+3. Detects PDF type: embedded text layer → `pdfplumber`; scanned images → Azure Document Intelligence OCR
+4. **Text-layer parsing (pdfplumber):** extracts words with bounding boxes; uses BGN price words (`X.XX ЛВ.`) as spatial anchors; collects words in the same column above each anchor; finds EUR price pairs (first = regular, second = promo); back-calculates regular price from discount % if only one EUR is present
+5. **OCR parsing (Azure DI):** two-pass approach — Pass 1 anchors on `X.XX ЛВ.` and looks back for a EUR pair; Pass 2 catches EUR-pair-only products missed in Pass 1
+6. Auto-detects promo period from the downloaded filename
+7. Replaces all `Fantastico / Direct` records in master
 
 **How to run:**
 
 ```bash
-# Full pipeline: download PDF, OCR via Azure, parse, merge
-python fantastico_ocr_pipeline.py --key YOUR_AZURE_KEY
+# Fully automated (download + parse + merge)
+python fantastico_pipeline.py
 
-# If you already have the PDF
-python fantastico_ocr_pipeline.py --key YOUR_AZURE_KEY --pdf fantastico_work/fantastico_brochure.pdf
+# Use an already-downloaded PDF
+python fantastico_pipeline.py --pdf fantastico_work/fantastico_brochure.pdf
 
-# If OCR is already done (reuse cached JSON files)
-python fantastico_ocr_pipeline.py --ocr-dir fantastico_work/ocr_output/
+# Force Azure OCR even if a text layer is detected
+python fantastico_pipeline.py --force-ocr
 
-# Merge with existing dataset
-python fantastico_ocr_pipeline.py --ocr-dir fantastico_work/ocr_output/ --existing bulgarian_promo_prices_merged.json
+# Dry run — parse and report without writing to master
+python fantastico_pipeline.py --dry-run
 ```
 
-Azure credentials: endpoint is `https://invoice2024.cognitiveservices.azure.com/`. The API key must be passed via `--key`.
+Requires: `pip install playwright && playwright install chromium`
+Azure key for OCR fallback: set `AZURE_KEY` in `secrets.py` or pass `--key YOUR_AZURE_KEY`.
 
 ---
 
@@ -208,35 +174,32 @@ billa_work/
 
 ## Running all sources and rebuilding the master dataset
 
-Run each scraper individually (in any order), then rebuild the master:
+Run in this order each promo week (Wednesday or Thursday). Each script merges its own records directly into the master JSON — no separate merge step needed.
 
 ```bash
-# 1. Billa — PDF pipeline (auto-downloads, OCRs, compares with ssbbilla.site, merges)
-python billa_pdf_pipeline.py --key YOUR_AZURE_KEY
-#    Azure key can live in secrets.py instead: then just run:
-#    python billa_pdf_pipeline.py
-
-# 2. Gladen
+# 1. Gladen.bg / Hit Max
+#    Update PROMO_PERIOD constant at top of file first
 python gladen_html_scraper.py
 
-# 3. Fantastico (PDF parser — preferred if PDF has a text layer)
-#    First place the PDF at: fantastico_work/fantastico_brochure.pdf
-python fantastico_pdf_parser.py
-#    OR via OCR if the PDF is scanned images:
-python fantastico_ocr_pipeline.py --key YOUR_AZURE_KEY --existing bulgarian_promo_prices_merged.json
+# 2a. Billa PDF brochure OCR (supplementary items only)
+python billa_pdf_pipeline.py --key YOUR_AZURE_KEY
+#     Azure key can live in secrets.py — then just: python billa_pdf_pipeline.py
 
-# 4. Rebuild master from all sources
-python merge_all.py
-```
+# 2b. Billa ssbbilla.site (main Billa source)
+python billa_scraper.py
 
-> **Note on Billa sources:** `billa_scraper.py` (ssbbilla.site text scraper) and `billa_pdf_pipeline.py` (PDF OCR) are complementary. The PDF pipeline is the authoritative source; it uses ssbbilla.site to fill gaps. Once you've confirmed via the weekly comparison report that ssbbilla.site covers all products, set `BILLA_WEEKLY_COMPARISON = False` in `config.py` to skip the PDF OCR step and rely on ssbbilla.site alone.
+# 3. Kaufland Direct + all Glovo sources
+#    Update hardcoded product lists and file paths in the script first
+python write_glovo_data.py
 
-After merging, regenerate the Excel output:
+# 4. Fantastico Direct (fully automated)
+python fantastico_pipeline.py
 
-```bash
-python generate_xlsx.py
+# 5. Generate Excel report
 python generate_cheapest_xlsx.py
 ```
+
+> **Note on Billa sources:** `billa_scraper.py` (ssbbilla.site) is the primary Billa source. `billa_pdf_pipeline.py` supplements it by adding PDF-only items not found on ssbbilla.site. The weekly comparison report (`billa_work/comparison_YYYY-MM-DD.xlsx`) shows which items come from each source.
 
 ---
 
@@ -253,8 +216,8 @@ Each record in `bulgarian_promo_prices_merged.json`:
 | `unit` | string\|null | Unit (бр, кг, л, etc.) |
 | `price_per_unit` | null | Reserved, not yet populated |
 | `promo_period` | string | Validity period, e.g. `"26.03 - 01.04.2026"` |
-| `source_store` | string | `"Billa"`, `"Gladen.bg / Hit Max"`, or `"Fantastico"` |
-| `source_channel` | string | `"Direct"` for all current sources |
+| `source_store` | string | `"Billa"`, `"Hit Max"`, `"Kaufland"`, `"Fantastico"` |
+| `source_channel` | string | `"Direct"` (retailer site/brochure), `"Glovo"` (Glovo app), or `"Gladen.bg"` (Hit Max records only) |
 | `source_url` | string | URL of the source page or product |
 | `extraction_date` | string | ISO date of extraction, e.g. `"2026-04-06"` |
 
@@ -281,11 +244,11 @@ AZURE_KEY = "your-key-here"
 ## Dependencies
 
 ```bash
-pip install requests pdfplumber openpyxl
+pip install requests pdfplumber openpyxl openai
 
-# For Billa PDF pipeline and Fantastico OCR:
+# For Billa PDF pipeline and Fantastico OCR fallback:
 pip install azure-ai-documentintelligence PyPDF2
 
-# For Playwright fallback (Billa PDF download if direct URL fails):
+# Required for Fantastico pipeline (headless browser); also used as Billa PDF download fallback:
 pip install playwright && playwright install chromium
 ```

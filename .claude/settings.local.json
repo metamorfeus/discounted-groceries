@@ -45,7 +45,10 @@
       "Bash(python3 *)",
       "Bash(dir /B)",
       "WebFetch(domain:hermes-agent.nousresearch.com)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(pip --version)",
+      "Bash(pip show *)"
     ]
   }
 }

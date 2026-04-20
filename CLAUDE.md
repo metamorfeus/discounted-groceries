@@ -97,7 +97,7 @@ File: `bulgarian_promo_prices_merged.json`
 }
 ```
 
-`source_channel` is either `Direct` (retailer website/brochure) or `Glovo` (Glovo app). All prices are in **EUR** (BGN ÷ 1.95583).
+`source_channel` is `Direct` (retailer website/brochure), `Glovo` (Glovo app), or `Gladen.bg` (Gladen.bg aggregator site). Exception: Gladen records use `source_store = "Hit Max"` and `source_channel = "Gladen.bg"`. All prices are in **EUR** (BGN ÷ 1.95583).
 
 ---
 
