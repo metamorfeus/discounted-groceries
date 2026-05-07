@@ -16,17 +16,22 @@ python gladen_html_scraper.py
 # Update PROMO_PERIOD constant at top of the file each week before running
 # Options: --pages N (limit pages), --dry-run (parse only, no write)
 
-# Step 2a: Billa PDF brochure OCR — supplementary items only (~126 records)
+# Step 2b: Billa ssbbilla.site — main Billa source (~275–319 records)
+python billa_scraper.py
+# Auto-merges into master JSON. Options: --input FILE (use saved page), --download (force re-fetch)
+# Run 2b BEFORE 2a so the PDF pipeline sees current ssbbilla data for comparison
+
+# Step 2a: Billa PDF brochure OCR — supplementary items only (~63–126 records)
 python billa_pdf_pipeline.py --key YOUR_AZURE_KEY
+# Adds PDF-only items not found on ssbbilla.site. OCR cache auto-invalidates on new PDF.
 # Fallback: --pdf PATH if auto-download fails
 
-# Step 2b: Billa ssbbilla.site — main Billa source (~319 records)
-python billa_scraper.py
-# Options: --input FILE (use saved page), --download (force re-fetch)
-
-# Step 3: Kaufland Direct + all Glovo sources (~734+104 records)
+# Step 3: Kaufland Direct + all Glovo sources
 python write_glovo_data.py
-# IMPORTANT: Update hardcoded product lists and file paths in the script each week
+# IMPORTANT: Before running — use FireCrawl MCP to scrape kaufland.bg/aktualni-predlozheniya/ot-ponedelnik.html
+# then update KAUFLAND_FILE path in write_glovo_data.py to the new tool-results file.
+# Also update PROMO_PERIOD constant at top of the file each week.
+# Glovo sources (Kaufland/Billa/Fantastico): blocked from non-BG IP — leave as empty lists unless VPN available.
 
 # Step 4: Fantastico Direct — fully automated (~189 records)
 python fantastico_pipeline.py
@@ -66,10 +71,11 @@ generate_cheapest_xlsx.py → Reads master JSON → 6-sheet Excel via openpyxl
 
 | File | Purpose |
 |---|---|
-| `config.py` | Non-secret: Azure endpoint, batch sizes, feature flags, retry config |
-| `secrets.py` | API keys: `AZURE_KEY` (Azure DI), Azure OpenAI key — **never commit** |
+| `config.py` | Non-secret: Azure DI endpoint, batch sizes, feature flags, retry config |
+| `secrets.py` | **All API keys** — `AZURE_KEY` (Document Intelligence) + `AZURE_OPENAI_KEY` (GPT-4o) — **never commit** |
+| `azure_config.json` | Non-secret Azure OpenAI config: endpoint, deployment name, API version, timeouts |
+| `azure_secrets.json` | Legacy fallback only — scripts prefer `secrets.py`; keep in sync if needed |
 | `manual_overrides.json` | Manual category corrections keyed by `product_name` |
-| `azure_config.json` / `azure_secrets.json` | Additional Azure configuration |
 
 Key `config.py` flags:
 - `BILLA_WEEKLY_COMPARISON` — enables PDF vs ssbbilla.site diff report

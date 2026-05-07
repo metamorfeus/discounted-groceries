@@ -446,14 +446,28 @@ def ocr_batch(pdf_path, endpoint, key):
     return {"pages": pages_data, "full_text": result.content or "", "source_file": pdf_path}
 
 
-def ocr_all_batches(batch_files, ocr_dir, endpoint, key):
+def ocr_all_batches(batch_files, ocr_dir, endpoint, key, pdf_source=None):
     """
     OCR all batches, caching results as JSON in ocr_dir.
     Already-processed batches are loaded from cache.
+    If pdf_source changes (different brochure), the cache is invalidated.
     Returns list of OCR result dicts.
     """
     ocr_dir = Path(ocr_dir)
     ocr_dir.mkdir(parents=True, exist_ok=True)
+
+    # Invalidate cache when the source PDF changes
+    fingerprint_file = ocr_dir / ".pdf_source"
+    current_source = Path(pdf_source).name if pdf_source else ""
+    if fingerprint_file.exists():
+        cached_source = fingerprint_file.read_text(encoding="utf-8").strip()
+        if cached_source != current_source:
+            log.info(f"  PDF source changed ({cached_source} → {current_source}) — clearing OCR cache")
+            for f in ocr_dir.glob("*_ocr.json"):
+                f.unlink()
+    if current_source:
+        fingerprint_file.write_text(current_source, encoding="utf-8")
+
     results = []
 
     for i, batch_path in enumerate(batch_files):
@@ -1162,7 +1176,7 @@ def main():
         ocr_dir   = WORK_DIR / "ocr_output"
 
         batches = split_pdf(pdf_path, batch_dir)
-        ocr_results = ocr_all_batches(batches, ocr_dir, AZURE_ENDPOINT, azure_key)
+        ocr_results = ocr_all_batches(batches, ocr_dir, AZURE_ENDPOINT, azure_key, pdf_source=pdf_path)
 
     if args.ocr_dir:
         ocr_results = load_ocr_from_directory(args.ocr_dir)

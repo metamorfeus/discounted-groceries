@@ -860,15 +860,17 @@ def main():
     for p in clean:
         p.pop('promo_label', None)
 
-    # Merge with existing dataset
-    if args.existing:
-        merged = merge_with_existing(clean, args.existing)
+    # Merge with existing dataset — auto-detect master JSON if not specified
+    MASTER_JSON = "bulgarian_promo_prices_merged.json"
+    existing_path = args.existing or (MASTER_JSON if Path(MASTER_JSON).exists() else None)
+    if existing_path:
+        merged = merge_with_existing(clean, existing_path)
         print(f"Merged with existing: {len(merged)} total records")
     else:
         merged = clean
 
-    # Output
-    output_path = args.output or f"billa_products_{EXTRACTION_DATE}.json"
+    # Output — write back to master if that's what we merged with
+    output_path = args.output or (MASTER_JSON if existing_path == MASTER_JSON else f"billa_products_{EXTRACTION_DATE}.json")
     with open(output_path, 'w', encoding='utf-8') as f:
         json.dump(merged, f, ensure_ascii=False, indent=2)
     print(f"Written to: {output_path}")

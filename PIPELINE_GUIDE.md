@@ -59,11 +59,16 @@ python billa_scraper.py
 
 Scrapes `ssbbilla.site/catalog/sedmichna-broshura` — the accessibility version
 of the Billa weekly brochure — which has clean structured text (no OCR needed).
-This is the primary Billa data source with ~319 products.
+This is the primary Billa data source with ~275–319 products.
 
 - **Source:** ssbbilla.site — live HTTP, no browser needed
-- **Updates:** Billa / Direct records in master (replaces all previous Billa Direct)
+- **Updates:** Billa / Direct records in master (auto-detects and writes to `bulgarian_promo_prices_merged.json`)
 - **Options:** `--input FILE` to parse a previously saved page, `--download` to force re-fetch
+- **Note:** Run step 2b **before** step 2a so the PDF pipeline sees up-to-date ssbbilla data for comparison.
+
+**OCR cache note (billa_pdf_pipeline.py):** The pipeline caches Azure DI OCR results in
+`billa_work/ocr_output/`. Cache is now auto-invalidated when a new PDF is downloaded
+(fingerprint stored in `billa_work/ocr_output/.pdf_source`). No manual cache clearing needed.
 
 ---
 
@@ -145,8 +150,10 @@ Reads the master JSON and produces `bg_cheapest_vN_YYYY-MM-DD.xlsx` with sheets:
 
 | File | Purpose |
 |------|---------|
-| `secrets.py` | API keys — Azure DI key, Azure OpenAI key. Never commit to git. |
-| `config.py` | Non-secret settings — batch sizes, retry counts, feature flags |
+| `secrets.py` | **All API keys** — `AZURE_KEY` (Document Intelligence, used by `billa_pdf_pipeline.py` and `fantastico_pipeline.py`) and `AZURE_OPENAI_KEY` (GPT-4o, used by `generate_cheapest_xlsx.py`, `translator.py`, `analyze_categories.py`). Never commit to git. |
+| `config.py` | Non-secret settings — Azure DI endpoint, batch sizes, retry counts, feature flags |
+| `azure_config.json` | Non-secret Azure OpenAI config — endpoint URL, deployment name, API version, timeouts |
+| `azure_secrets.json` | Legacy fallback only — `AZURE_OPENAI_KEY` in `secrets.py` takes precedence |
 
 ---
 

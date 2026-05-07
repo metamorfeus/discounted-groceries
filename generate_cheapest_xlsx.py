@@ -1171,10 +1171,17 @@ def ai_classify_unclassified(enriched, cfg, key):
 def load_azure():
     try:
         cfg = json.loads(CONFIG_PATH.read_text(encoding='utf-8'))
-        sec = json.loads(SECRETS_PATH.read_text(encoding='utf-8'))
-        key = sec.get('api_key', '')
-        if 'ВАШИЯТ' in key or not key:
-            print("  Предупреждение: попълнете api_key в azure_secrets.json", flush=True)
+        key = None
+        try:
+            import secrets as _s
+            key = getattr(_s, 'AZURE_OPENAI_KEY', None) or getattr(_s, 'api_key', None)
+        except ImportError:
+            pass
+        if not key:
+            sec = json.loads(SECRETS_PATH.read_text(encoding='utf-8'))
+            key = sec.get('api_key') or None
+        if not key:
+            print("  Предупреждение: попълнете AZURE_OPENAI_KEY в secrets.py", flush=True)
             return cfg, None
         return cfg, key
     except Exception as e:

@@ -74,12 +74,19 @@ def save_cache(cache: dict) -> None:
 # ── Azure config ──────────────────────────────────────────────────────────────
 
 def load_azure_cfg():
-    """Return (cfg_dict, api_key) from azure_config.json + azure_secrets.json."""
+    """Return (cfg_dict, api_key) from azure_config.json. Key read from secrets.py."""
     try:
         cfg = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
-        sec = json.loads(SECRETS_PATH.read_text(encoding="utf-8"))
-        key = sec.get("api_key", "")
-        return cfg, (key if key else None)
+        key = None
+        try:
+            import secrets as _s
+            key = getattr(_s, "AZURE_OPENAI_KEY", None) or getattr(_s, "api_key", None)
+        except ImportError:
+            pass
+        if not key:
+            sec = json.loads(SECRETS_PATH.read_text(encoding="utf-8"))
+            key = sec.get("api_key") or None
+        return cfg, key
     except Exception as e:
         print(f"  Azure config error: {e}", flush=True)
         return {}, None

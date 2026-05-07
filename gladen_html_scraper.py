@@ -20,7 +20,7 @@ import requests
 SOURCE_STORE = "Hit Max"
 SOURCE_CHANNEL = "Gladen.bg"
 SOURCE_URL_BASE = "https://gladen.bg/promotions"
-PROMO_PERIOD = "16.04 - 22.04.2026"
+PROMO_PERIOD = "07.05 - 13.05.2026"
 EXTRACTION_DATE = date.today().isoformat()
 MAX_PAGES = 42  # 1,000 products / 24 per page
 

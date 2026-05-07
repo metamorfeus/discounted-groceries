@@ -13,7 +13,7 @@ sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
 MASTER_PATH = Path("bulgarian_promo_prices_merged.json")
 EXTRACTION_DATE = date.today().isoformat()
-PROMO_PERIOD = "16.04 - 22.04.2026"
+PROMO_PERIOD = "07.05 - 13.05.2026"
 
 # ── Glovo store-name normalisation ───────────────────────────────────────────
 # Maps non-standard Glovo store names → (source_store, source_channel).
@@ -64,9 +64,9 @@ print(f"Billa Glovo: {len(billa_glovo_records)} products")
 
 # ── Kaufland Direct — parse from FireCrawl file ──────────────────────────────
 KAUFLAND_FILE = Path(
-    r"C:\Users\PVELINOV\.claude\projects\C--AHA-OneDrive---AHA-BG-FOOD-PRICES"
-    r"\254abe44-33f2-47b8-9059-578d0a708f8e\tool-results"
-    r"\mcp-claude_ai_firecrawl-firecrawl_scrape-1776402811343.txt"
+    r"C:\Users\PVELINOV\.claude\projects\c--AHA-OneDrive---AHA-BG-FOOD-PRICES"
+    r"\2bc74b47-5ae6-4f01-99d9-46ef72da99a9\tool-results"
+    r"\mcp-claude_ai_firecrawl-firecrawl_scrape-1778129195242.txt"
 )
 
 SEP     = '\\\\\n\\\\\n'
