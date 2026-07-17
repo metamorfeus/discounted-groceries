@@ -2,6 +2,28 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+---
+
+## Log-off Protocol
+
+**Trigger:** Any message where the user says they are about to log off, log out, end the session, or sign off (e.g. "I'm logging off", "end session", "signing off", "wrapping up").
+
+When triggered, execute ALL of the following steps in order without waiting for further instructions:
+
+1. **Update documentation** — Review `PIPELINE_GUIDE.md`, `CLAUDE.md`, and `RUN_LOG.md`. Add a `RUN_LOG.md` entry for the current session if one does not exist. Update any doc that is now out of date based on work done this session.
+
+2. **Save the chat session** — Update the Hermes seed facts in `HERMES_INTERGRATION/seed_hermes_memory.py` (`SEED_FACTS` constant) to reflect the current state of the pipeline, the last pipeline run (CW number, date, record count), and any fixes applied this session.
+
+3. **Create session memory file** — Write a new session memory file in `C:\Users\PVELINOV\.claude\projects\c--AHA-OneDrive---AHA-BG-FOOD-PRICES\memory\session_YYYY-MM-DD.md` covering: what ran, record counts, bugs found and fixed, files changed, and a next-week checklist. Then add a one-line pointer entry at the top of `MEMORY.md`.
+
+4. **Commit changes to git** — Stage all modified tracked files and create a git commit. Use a descriptive commit message (e.g. "CW19 pipeline run + fixes: OCR cache, billa_scraper auto-merge, secrets consolidation"). Do not push unless explicitly asked.
+
+5. **Sync with Hermes** — Run `python HERMES_INTERGRATION/seed_hermes_memory.py` to push the updated seed facts to the VPS Hermes profile. Confirm success.
+
+Report completion of each step as it finishes.
+
+---
+
 ## Project Purpose
 
 Weekly pipeline that scrapes promotional grocery prices from Bulgarian retailers (Gladen.bg/Hit Max, Billa, Kaufland, Fantastico), merges them into a master JSON dataset, and generates an Excel price-comparison report.

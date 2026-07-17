@@ -1,0 +1,78 @@
+the weekly flyer with Billa promotional items can be downloaded from here:
+https://www.billa.bg/promocii/sedmichna-broshura
+
+to download the PDF from the main page you need to click the button "Отвори" and then this opens the reader that allow you to click on the "Изтегляне на PDF" button to download the PDF.
+
+I've already downloaded the weekly flyer in the folder here and it's called 
+"BILLA Bulgaria - BG_weekly_Digital_Leaflet_02.04.-08.04.2026_CW14_11.03__WEB.pdf"
+
+
+The share link is found on the page is "https://view.publitas.com/billa-bulgaria/bg_weekly_digital_leaflet_02-04-08-04-2026_cw14_11-03__web/page/1"
+
+Create a process that can automatically download the PDF and then parse the content
+
+Looks like we are going to need to OCR the content using the Azure Document Intelligence.
+
+Analise the steps and build a reliable way to extract the PDF and then OCR (if need be) and capture all items and prices in euro. Ask questions before you write code
+
+1. it's images not text layer
+2. it is similar to the Fantastico brochure, each product has a clear OLD € → NEW € → BGN price pattern. For the Billa PDF specifically:
+  - prices are shown as both EUR and BGN
+  - Is there a consistent layout (e.g. product image + name + old price + new price + discount %) - yes 
+  - Roughly how many pages and products per page? - about 50 pages and about 12 products per page
+
+
+3. yes, Downloading this fully automated week-to-week
+4. yes, same azure credentials
+5. before replacing  billa_scraper.py that scrapes from ssbbilla.site let's fist compare what's in the  Billa PDF to what is published on ssbbilla.site and we should amend ssbbilla.site with what is in the Billa PDF only if the Billa PDF contains items that are not published on ssbbilla.site
+6. to run the document though Azure DI and provide you with the OCR output I need to split the document in to smaller chuncks of max 2 pages 
+
+
+===
+
+● Here's a summary of how prices are extracted from each retailer:
+
+  ---
+  Billa (billa_scraper.py)
+
+  - Source: ssbbilla.site — an accessibility (screen-reader) version of the BILLA weekly brochure with full structured text (not images/flipbook)
+  - Method: Scraped via Firecrawl MCP as markdown, then parsed with regex patterns
+  - Price extraction: Regex against the markdown text to find BGN prices (лв.) and distinguish promo vs. regular prices
+
+  ---
+  Gladen.bg / Hit Max (gladen_html_scraper.py)
+
+  - Source: r — paginated HTML promotions listing
+  - Method: Direct HTTP requests (requests library) across up to 42 pages (≈1,000 products / 24 per page)
+  - Price extraction: HTML regex targeting specific CSS classes:
+    - product-card-price-current is-promo → promo price
+    - product-card-price-old → regular price
+    - Only keeps items where promo < regular (genuine discounts)
+
+  There's also an older markdown-based parser (gladen_scraper.py) that parsed Firecrawl markdown output using BGN regex (\d+\.\d{2})\s*лв\. — replaced by the HTML
+   scraper.
+
+  ---
+  Fantastico (fantastico_pdf_parser.py)
+
+  - Source: Fantastico's brochure PDF (downloaded from their FlippingBook viewer)
+  - Method: pdfplumber — extracts words with bounding boxes (x/y coordinates), then groups them into spatial columns
+  - Price extraction: Finds BGN price words matching \d{1,3}[.,]\d{2}\s*ЛВ\., uses column geometry to associate nearby text as the product name, and infers       
+  regular price from EUR prices (converted at 1.95583 rate) or discount % (-19% etc.)
+
+  - There's also an older OCR pipeline (fantastico_ocr_pipeline.py) using Azure Document Intelligence (prebuilt-read model) for when the PDF text is not
+  machine-readable (scanned images).
+
+  ---
+  Common pattern across all
+
+  All parsers normalize to the same schema: product_name, promo_price, regular_price, unit, promo_period, source_store, extraction_date — and merge into a single 
+  bulgarian_promo_prices_merged.json master file with deduplication.
+
+
+===
+
+# Azure Document Intelligence
+AZURE_ENDPOINT = "https://invoice2024.cognitiveservices.azure.com/"
+AZURE_MODEL_ID = "prebuilt-read"
+✻ Cooked for 30s
