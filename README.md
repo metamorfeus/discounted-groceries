@@ -93,3 +93,14 @@ Also covers: output JSON schema, config.py flags, pip dependencies.
 | `analyze_categories.py` | Ad-hoc | No — outputs category_analysis_report.json |
 | `billa_ocr_test.py` | Dev/debug only | No |
 | `billa_ocr_parse_test.py` | Dev/debug only | No |
+
+## About the author
+
+Discounted Groceries is made by Peter Velinov / Metamorfeus.
+
+- [Metamorfeus](https://metamorfeus.com/) — Custom AI automation services for business processes.
+- [Metamorfeus products](https://metamorfeus.com/shop/) — Paid offerings including AI audits, workforce automation and employee AI training.
+- [Claude Cowork Training](https://claudecoworktraining.com/) — Independent, free self-paced training for everyday work, with paid team workshops; using Cowork requires a paid Claude plan.
+- [Management Assistant](https://assistant.metamorfeus.com/) — Turns meeting audio or transcripts into draft minutes for review and keeps tasks, owners and due dates together.
+
+Some linked products and services are paid. Discounted Groceries stays free and works without any of them. Independent; not affiliated with or endorsed by Billa, Kaufland, Fantastico, Gladen or Glovo.
